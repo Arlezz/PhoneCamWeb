@@ -6,9 +6,9 @@
 //   node tools/ws-check.mjs [url] [segundos] [--save captura.h264]
 //
 // Ejemplos:
-//   node tools/ws-check.mjs                          # ws://localhost:5000 durante 600 s
-//   node tools/ws-check.mjs ws://localhost:5000 30   # prueba corta
-//   node tools/ws-check.mjs ws://localhost:5000 10 --save captura.h264
+//   node tools/ws-check.mjs                          # ws://127.0.0.1:5000 durante 600 s
+//   node tools/ws-check.mjs ws://127.0.0.1:5000 30   # prueba corta
+//   node tools/ws-check.mjs ws://127.0.0.1:5000 10 --save captura.h264
 //   ffplay -f h264 captura.h264                      # ver lo guardado (opcional)
 //
 // Requiere Node 22 o superior (WebSocket global).
@@ -19,7 +19,7 @@ const args = process.argv.slice(2);
 const saveIndex = args.indexOf('--save');
 const savePath = saveIndex >= 0 ? args[saveIndex + 1] : null;
 const positional = args.filter((_, i) => saveIndex < 0 || (i !== saveIndex && i !== saveIndex + 1));
-const url = positional[0] ?? 'ws://localhost:5000';
+const url = positional[0] ?? 'ws://127.0.0.1:5000';
 const seconds = Number(positional[1] ?? 600);
 const MIN_FPS = 25;
 

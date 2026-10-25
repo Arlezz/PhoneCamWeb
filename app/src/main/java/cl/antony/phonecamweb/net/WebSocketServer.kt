@@ -29,7 +29,9 @@ import kotlin.concurrent.thread
 class WebSocketServer(
     private val port: Int,
     private val hub: FrameHub,
-    private val bindAddress: InetAddress = InetAddress.getLoopbackAddress(),
+    // 127.0.0.1 explícito: en Android getLoopbackAddress() puede devolver ::1 (IPv6)
+    // y adb forward se conecta por IPv4.
+    private val bindAddress: InetAddress = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)),
     private val log: (String) -> Unit = {},
 ) {
     private var serverSocket: ServerSocket? = null

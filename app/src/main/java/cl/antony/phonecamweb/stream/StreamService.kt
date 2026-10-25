@@ -27,6 +27,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Servicio en primer plano (tipo `camera`): mantiene la cámara, el encoder y
@@ -145,7 +146,7 @@ class StreamService : LifecycleService() {
     private fun startStats() {
         statsJob = lifecycleScope.launch {
             while (isActive) {
-                delay(1000)
+                delay(1000.milliseconds)
                 val (fps, kbps) = meter.snapshot()
                 StreamState.update { it.copy(fps = fps, kbps = kbps) }
             }
