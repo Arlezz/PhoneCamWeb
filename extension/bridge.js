@@ -1,6 +1,10 @@
 // Se ejecuta en el contexto aislado de la extensión (no le aplican las reglas CSP
 // del sitio). Cuando inject.js avisa que la página quiere la cámara, se conecta al
 // teléfono, decodifica el video y lo dibuja en el canvas compartido.
+//
+// La conexión en sí la abre el service worker (background.js): desde aquí Chrome
+// bloquearía ws:// hacia la red local por venir de una página https. RelaySocket
+// imita a un WebSocket para que receiver.js no note la diferencia.
 
 (() => {
   const CANVAS_ID = 'phonecam-web-canvas';
@@ -36,7 +40,7 @@
     if (!receiver) {
       // receiver.js es un módulo; los content scripts no, así que lo importamos así.
       const { PhoneCamReceiver } = await import(chrome.runtime.getURL('receiver.js'));
-      receiver = new PhoneCamReceiver({ onFrame, onStatus, onStats });
+      receiver = new PhoneCamReceiver({ onFrame, onStatus, onStats, createSocket: (url) => new RelaySocket(url) });
     }
     const { address = DEFAULT_ADDRESS } = await chrome.storage.local.get('address');
     if (!running) return; // la página la soltó mientras cargábamos
@@ -91,6 +95,54 @@
     running = false;
     onStatus('error', `PhoneCam Web: ${error.message}`);
     console.error('[PhoneCam Web]', error);
+  }
+
+  /** Un "WebSocket" cuyo extremo real vive en el service worker. */
+  class RelaySocket {
+    constructor(url) {
+      this.binaryType = 'arraybuffer';
+      this.onopen = null;
+      this.onmessage = null;
+      this.onclose = null;
+      this.closed = false;
+      try {
+        this.port = chrome.runtime.connect({ name: 'phonecam-relay' });
+      } catch (error) {
+        // La extensión se recargó: esta página quedó con una versión vieja.
+        setTimeout(() => this.#finish(1006, 'Recarga la página: la extensión se actualizó'), 0);
+        return;
+      }
+      this.port.onMessage.addListener((message) => {
+        if (message.t === 'd') this.onmessage?.({ data: fromBase64(message.b).buffer });
+        else if (message.t === 'open') this.onopen?.();
+        else if (message.t === 'close') this.#finish(message.code, message.reason);
+      });
+      this.port.onDisconnect.addListener(() => this.#finish(1006, ''));
+      this.port.postMessage({ t: 'connect', url });
+    }
+
+    close() {
+      this.closed = true;
+      try {
+        this.port?.disconnect();
+      } catch {
+        // ya estaba cerrado
+      }
+    }
+
+    #finish(code, reason) {
+      if (this.closed) return;
+      this.closed = true;
+      this.onclose?.({ code, reason });
+    }
+  }
+
+  function fromBase64(text) {
+    if (typeof Uint8Array.fromBase64 === 'function') return Uint8Array.fromBase64(text); // Chrome reciente
+    const binary = atob(text);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
   }
 
   // Mientras no hay video dibujamos un aviso. Además mantiene viva la pista:

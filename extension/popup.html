@@ -19,7 +19,7 @@
     input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: 12px ui-monospace, monospace; background: transparent; color: inherit; }
     button { padding: 6px 10px; border: 0; border-radius: 6px; background: #2f6fdb; color: #fff; font-weight: 600; cursor: pointer; }
     .saved { color: var(--ok); font-size: 12px; min-height: 1.4em; margin: 4px 0 8px; }
-    .help { color: var(--muted); font-size: 12px; margin: 0; }
+    .help { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
   </style>
 </head>
 <body>
@@ -34,8 +34,9 @@
   </div>
   <div id="saved" class="saved"></div>
 
-  <p class="help">En la videollamada, elige <b>Cámara Android (PhoneCam Web)</b> en la configuración de video.
-    Por USB, recuerda correr <code>adb forward tcp:5000 tcp:5000</code>.</p>
+  <p class="help">En la videollamada, elige <b>Cámara Android (PhoneCam Web)</b> en la configuración de video.</p>
+  <p class="help"><b>Cable:</b> <code>ws://127.0.0.1:5000</code> con <code>tools/usb-forward.sh</code> corriendo.<br>
+    <b>Wi‑Fi:</b> activa la opción en la app y pega aquí la dirección que muestra (incluye el código).</p>
 
   <script src="popup.js"></script>
 </body>

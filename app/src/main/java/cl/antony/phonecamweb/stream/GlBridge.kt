@@ -24,6 +24,7 @@ import kotlin.math.abs
  * Puente por GPU entre la cámara y el encoder:
  *
  *   cámara → [inputSurface] → textura OpenGL → dibujo → [superficie del encoder]
+ *                                                     → [vista previa en pantalla, si hay]
  *
  * ¿Por qué? Algunos encoders (por ejemplo el de Qualcomm del Galaxy S25) suponen que
  * su superficie recibe imágenes RGBA dibujadas por la GPU. Si la cámara escribe ahí
@@ -33,11 +34,15 @@ import kotlin.math.abs
  * Orientación: el video siempre sale horizontal (16:9) y derecho con el teléfono acostado.
  * La textura de la cámara normalmente viene girada para verse derecha con el teléfono
  * vertical; en ese caso la volvemos a girar 90° al dibujarla (si no, se vería estirada).
+ *
+ * Espejo: la cámara frontal llega espejada (como un espejo). Con [mirror] = true la
+ * "desespejamos" para que quienes te ven lean los textos al derecho.
  */
 class GlBridge(
     private val encoderSurface: Surface,
     private val width: Int,
     private val height: Int,
+    private val mirror: Boolean = false,
     /** true si el teléfono está acostado con su parte de arriba hacia la derecha. */
     private val isTopToRight: () -> Boolean = { false },
 ) {
@@ -46,13 +51,18 @@ class GlBridge(
 
     private var eglDisplay: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var eglContext: EGLContext = EGL14.EGL_NO_CONTEXT
+    private var eglConfig: EGLConfig? = null
     private var eglSurface: EGLSurface = EGL14.EGL_NO_SURFACE
+    private var previewSurface: EGLSurface = EGL14.EGL_NO_SURFACE
     private var program = 0
     private var textureId = 0
     private var uTexMatrix = 0
+    private var uMirror = 0
     private var aPosition = 0
     private var aTexCoord = 0
     private val texMatrix = FloatArray(16)
+    private val size = IntArray(1)
+    private var lastCameraRotated: Boolean? = null
 
     private var surfaceTexture: SurfaceTexture? = null
 
@@ -62,6 +72,21 @@ class GlBridge(
 
     @Volatile
     private var released = false
+
+    /** La pantalla agregó o retiró su vista previa. */
+    private val previewListener: (Surface?) -> Unit = { surface ->
+        if (surface != null) {
+            handler.post { attachPreview(surface) }
+        } else {
+            // Hay que soltarla antes de volver: después de esto Android la destruye.
+            val done = CountDownLatch(1)
+            val posted = handler.post {
+                detachPreview()
+                done.countDown()
+            }
+            if (posted) done.await(500, TimeUnit.MILLISECONDS)
+        }
+    }
 
     init {
         val ready = CountDownLatch(1)
@@ -80,6 +105,8 @@ class GlBridge(
             release()
             throw it
         }
+        PreviewOutput.addListener(previewListener)
+        PreviewOutput.surface?.let { surface -> handler.post { attachPreview(surface) } }
     }
 
     private fun setup() {
@@ -104,6 +131,7 @@ class GlBridge(
             "eglChooseConfig no encontró una configuración"
         }
         val config = configs[0]!!
+        eglConfig = config
 
         eglContext = EGL14.eglCreateContext(
             eglDisplay, config, EGL14.EGL_NO_CONTEXT,
@@ -115,11 +143,12 @@ class GlBridge(
         check(eglSurface != EGL14.EGL_NO_SURFACE) { "eglCreateWindowSurface falló" }
         check(EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)) { "eglMakeCurrent falló" }
 
-        // 2. Shaders: copian la textura de la cámara a la pantalla (el encoder).
+        // 2. Shaders: copian la textura de la cámara a la superficie de destino.
         program = buildProgram(VERTEX_SHADER, FRAGMENT_SHADER)
         aPosition = GLES20.glGetAttribLocation(program, "aPosition")
         aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
         uTexMatrix = GLES20.glGetUniformLocation(program, "uTexMatrix")
+        uMirror = GLES20.glGetUniformLocation(program, "uMirror")
 
         // 3. Textura externa donde escribe la cámara.
         val textures = IntArray(1)
@@ -136,8 +165,36 @@ class GlBridge(
         texture.setOnFrameAvailableListener({ drawFrame() }, handler)
         surfaceTexture = texture
         inputSurface = Surface(texture)
-        Log.i(TAG, "Puente OpenGL listo (${width}x$height)")
+        Log.i(TAG, "Puente OpenGL listo (${width}x$height, espejo=$mirror)")
     }
+
+    // ---- Vista previa ----
+
+    private fun attachPreview(surface: Surface) {
+        if (released) return
+        detachPreview()
+        try {
+            val created = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, intArrayOf(EGL14.EGL_NONE), 0)
+            if (created == EGL14.EGL_NO_SURFACE) return
+            previewSurface = created
+            // Que la vista previa nunca haga esperar al encoder por la sincronización de pantalla.
+            EGL14.eglMakeCurrent(eglDisplay, previewSurface, previewSurface, eglContext)
+            EGL14.eglSwapInterval(eglDisplay, 0)
+            EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+        } catch (e: Exception) {
+            Log.w(TAG, "No se pudo conectar la vista previa", e)
+            previewSurface = EGL14.EGL_NO_SURFACE
+        }
+    }
+
+    private fun detachPreview() {
+        if (previewSurface == EGL14.EGL_NO_SURFACE) return
+        EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+        EGL14.eglDestroySurface(eglDisplay, previewSurface)
+        previewSurface = EGL14.EGL_NO_SURFACE
+    }
+
+    // ---- Dibujo ----
 
     /** Se llama en el hilo de OpenGL cada vez que la cámara entrega un cuadro. */
     private fun drawFrame() {
@@ -146,24 +203,41 @@ class GlBridge(
         try {
             texture.updateTexImage()
             texture.getTransformMatrix(texMatrix)
+            val vertices = verticesFor(texMatrix)
 
-            GLES20.glViewport(0, 0, width, height)
-            GLES20.glUseProgram(program)
-            GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
-            GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
-            GLES20.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
-            GLES20.glEnableVertexAttribArray(aPosition)
-            GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 0, verticesFor(texMatrix))
-            GLES20.glEnableVertexAttribArray(aTexCoord)
-            GLES20.glVertexAttribPointer(aTexCoord, 2, GLES20.GL_FLOAT, false, 0, TEX_COORDS)
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-
+            // 1. Encoder (lo importante: primero, para no sumar latencia).
+            drawQuad(vertices, width, height)
             // El encoder usa este timestamp (ns) como tiempo del cuadro.
             EGLExt.eglPresentationTimeANDROID(eglDisplay, eglSurface, texture.timestamp)
             EGL14.eglSwapBuffers(eglDisplay, eglSurface)
+
+            // 2. Vista previa en pantalla, si está visible.
+            if (previewSurface != EGL14.EGL_NO_SURFACE) {
+                EGL14.eglMakeCurrent(eglDisplay, previewSurface, previewSurface, eglContext)
+                EGL14.eglQuerySurface(eglDisplay, previewSurface, EGL14.EGL_WIDTH, size, 0)
+                val previewWidth = size[0]
+                EGL14.eglQuerySurface(eglDisplay, previewSurface, EGL14.EGL_HEIGHT, size, 0)
+                drawQuad(vertices, previewWidth, size[0])
+                EGL14.eglSwapBuffers(eglDisplay, previewSurface)
+                EGL14.eglMakeCurrent(eglDisplay, eglSurface, eglSurface, eglContext)
+            }
         } catch (e: Exception) {
             if (!released) Log.w(TAG, "No se pudo dibujar el cuadro", e)
         }
+    }
+
+    private fun drawQuad(vertices: FloatBuffer, viewportWidth: Int, viewportHeight: Int) {
+        GLES20.glViewport(0, 0, viewportWidth, viewportHeight)
+        GLES20.glUseProgram(program)
+        GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
+        GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, textureId)
+        GLES20.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
+        GLES20.glUniform1f(uMirror, if (mirror) 1f else 0f)
+        GLES20.glEnableVertexAttribArray(aPosition)
+        GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 0, vertices)
+        GLES20.glEnableVertexAttribArray(aTexCoord)
+        GLES20.glVertexAttribPointer(aTexCoord, 2, GLES20.GL_FLOAT, false, 0, TEX_COORDS)
+        GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
     /**
@@ -187,19 +261,19 @@ class GlBridge(
         }
     }
 
-    private var lastCameraRotated: Boolean? = null
-
     /** Libera todo. Espera hasta 1 s a que el hilo de OpenGL termine. */
     fun release() {
         if (released) return
         released = true
+        PreviewOutput.removeListener(previewListener)
         val done = CountDownLatch(1)
-        handler.post {
+        val posted = handler.post {
             try {
                 surfaceTexture?.setOnFrameAvailableListener(null)
                 surfaceTexture?.release()
                 if (::inputSurface.isInitialized) inputSurface.release()
                 if (eglDisplay != EGL14.EGL_NO_DISPLAY) {
+                    detachPreview()
                     EGL14.eglMakeCurrent(eglDisplay, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
                     if (eglSurface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(eglDisplay, eglSurface)
                     if (eglContext != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(eglDisplay, eglContext)
@@ -214,7 +288,7 @@ class GlBridge(
                 thread.quitSafely()
             }
         }
-        done.await(1, TimeUnit.SECONDS)
+        if (posted) done.await(1, TimeUnit.SECONDS)
     }
 
     private fun buildProgram(vertexSource: String, fragmentSource: String): Int {
@@ -246,14 +320,20 @@ class GlBridge(
         private const val TAG = "GlBridge"
         private const val EGL_RECORDABLE_ANDROID = 0x3142
 
+        // uMirror = 1 "desespeja" la cámara frontal. Ojo: el espejo que aplica Android se hace
+        // sobre la imagen del sensor ANTES de girarla 90°, así que en este espacio (la imagen
+        // ya girada) el espejo queda VERTICAL. Voltear en horizontal aquí equivalía a girar
+        // 180° (probado en el Galaxy S25 Ultra: la frontal salía al revés en ambos lados).
         private val VERTEX_SHADER = """
             attribute vec4 aPosition;
             attribute vec4 aTexCoord;
             uniform mat4 uTexMatrix;
+            uniform float uMirror;
             varying vec2 vTexCoord;
             void main() {
                 gl_Position = aPosition;
-                vTexCoord = (uTexMatrix * aTexCoord).xy;
+                vec2 tc = vec2(aTexCoord.x, mix(aTexCoord.y, 1.0 - aTexCoord.y, uMirror));
+                vTexCoord = (uTexMatrix * vec4(tc, 0.0, 1.0)).xy;
             }
         """.trimIndent()
 

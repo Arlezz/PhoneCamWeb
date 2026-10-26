@@ -25,6 +25,11 @@ import kotlin.concurrent.thread
  *
  * Una petición HTTP normal (sin upgrade) recibe un texto de estado, útil para
  * probar con `curl http://localhost:5000`.
+ *
+ * Acceso: las conexiones desde el mismo teléfono (USB con adb forward llega como
+ * 127.0.0.1) no necesitan código. Las que vienen de la red (Wi‑Fi) deben incluir el
+ * código de acceso en la URL: ws://IP:5000/?code=K7QM-2XPA. Si no coincide, el servidor
+ * completa el handshake y cierra con el código 4001, para que el cliente sepa el motivo.
  */
 class WebSocketServer(
     private val port: Int,
@@ -32,8 +37,11 @@ class WebSocketServer(
     // 127.0.0.1 explícito: en Android getLoopbackAddress() puede devolver ::1 (IPv6)
     // y adb forward se conecta por IPv4.
     private val bindAddress: InetAddress = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1)),
+    /** Código exigido a las conexiones que no vienen del propio teléfono. */
+    private val accessCode: () -> String? = { null },
     private val log: (String) -> Unit = {},
 ) {
+    private val guard = AccessGuard()
     private var serverSocket: ServerSocket? = null
     private val clients = CopyOnWriteArraySet<Socket>()
 
@@ -81,6 +89,7 @@ class WebSocketServer(
                 writeStatusPage(output)
                 return
             }
+            if (!isAuthorized(socket, request, output, key)) return
             writeHandshake(output, key)
             log("Cliente conectado: ${socket.remoteSocketAddress}")
             serveWebSocket(socket, input, output)
@@ -131,6 +140,33 @@ class WebSocketServer(
             hub.unsubscribe(subscription)
             log("Cliente desconectado: ${socket.remoteSocketAddress}")
         }
+    }
+
+    /** Revisa el código de acceso. Si falla, responde (o no) y devuelve false. */
+    private fun isAuthorized(socket: Socket, request: HttpRequest, output: OutputStream, key: String): Boolean {
+        val remote = socket.inetAddress
+        if (remote.isLoopbackAddress) return true
+        if (guard.isBlocked(remote)) {
+            log("Conexión rechazada sin responder (demasiados intentos): $remote")
+            return false
+        }
+        val expected = accessCode()
+        val given = AccessCode.queryParam(request.path, "code")
+        if (expected != null && AccessCode.matches(expected, given)) {
+            guard.recordSuccess(remote)
+            return true
+        }
+        guard.recordFailure(remote)
+        log("Código de acceso incorrecto desde $remote")
+        // Completamos el handshake solo para poder decir por qué cerramos.
+        writeHandshake(output, key)
+        val reason = "Codigo de acceso incorrecto".toByteArray(Charsets.UTF_8)
+        val payload = ByteArray(2 + reason.size)
+        payload[0] = (CLOSE_BAD_CODE ushr 8).toByte()
+        payload[1] = (CLOSE_BAD_CODE and 0xFF).toByte()
+        System.arraycopy(reason, 0, payload, 2, reason.size)
+        writeFrame(output, OPCODE_CLOSE, payload)
+        return false
     }
 
     // ---- HTTP ----
@@ -250,6 +286,9 @@ class WebSocketServer(
         private const val OPCODE_PING = 0x9
         private const val OPCODE_PONG = 0xA
         private const val MAX_CLIENT_PAYLOAD = 64 * 1024
+
+        /** Código de cierre propio (rango 4000-4999 reservado para aplicaciones). */
+        const val CLOSE_BAD_CODE = 4001
         private const val WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
         /** Sec-WebSocket-Accept = base64(sha1(key + GUID)). */

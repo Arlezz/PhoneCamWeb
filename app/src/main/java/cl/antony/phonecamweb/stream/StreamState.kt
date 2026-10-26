@@ -13,6 +13,9 @@ data class StreamStatus(
     val fps: Int = 0,
     val kbps: Int = 0,
     val error: String? = null,
+    val frontCamera: Boolean = false,
+    /** Veces que el encoder falló y la app lo reinició sola. */
+    val restarts: Int = 0,
 )
 
 /** Estado compartido entre el servicio (escribe) y la pantalla (lee). */

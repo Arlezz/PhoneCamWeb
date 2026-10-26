@@ -17,6 +17,8 @@ const TYPE_KEYFRAME = 1;
 // descartamos deltas hasta el próximo keyframe (la misma idea que FrameHub en el teléfono).
 const MAX_DECODE_QUEUE = 3;
 const RECONNECT_MS = 1000;
+// El teléfono cierra con este código si el código de acceso no coincide (WebSocketServer.kt).
+const CLOSE_BAD_CODE = 4001;
 
 /** Lee el encabezado de 10 bytes. Ver Protocol.kt. */
 export function parseMessage(buffer) {
@@ -58,8 +60,14 @@ export class PhoneCamReceiver {
   #arrivals = new Map(); // timestamp → momento en que llegó (para medir la decodificación)
   #window = null;
 
-  constructor({ onFrame, onStatus = () => {}, onStats = () => {}, hardwareAcceleration = 'no-preference' }) {
+  /**
+   * createSocket permite cambiar cómo se abre la conexión. Por defecto es un WebSocket
+   * normal; la extensión usa uno que pasa por su service worker (ver bridge.js).
+   * Lo que devuelva debe imitar a WebSocket: binaryType, onopen, onmessage, onclose y close().
+   */
+  constructor({ onFrame, onStatus = () => {}, onStats = () => {}, hardwareAcceleration = 'no-preference', createSocket = (url) => new WebSocket(url) }) {
     this.onFrame = onFrame;
+    this.createSocket = createSocket;
     this.hardwareAcceleration = hardwareAcceleration;
     this.onStatus = onStatus;
     this.onStats = onStats;
@@ -106,17 +114,23 @@ export class PhoneCamReceiver {
 
   #open() {
     this.onStatus('conectando', this.#url);
-    const ws = new WebSocket(this.#url);
+    const ws = this.createSocket(this.#url);
     ws.binaryType = 'arraybuffer';
     ws.onopen = () => {
       this.#waitingForKeyframe = true;
       this.onStatus('conectado', this.#url);
     };
     ws.onmessage = (event) => this.#onMessage(event.data);
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       this.#ws = null;
       this.#closeDecoder();
       if (!this.#shouldRun) return;
+      if (event?.code === CLOSE_BAD_CODE) {
+        // Reintentar no sirve (y el teléfono bloquea tras 5 intentos): esperamos a que lo corrijas.
+        this.#shouldRun = false;
+        this.onStatus('error', 'Código de acceso incorrecto. Copia la dirección que muestra la app del teléfono.');
+        return;
+      }
       this.onStatus('reconectando', 'Sin conexión con el teléfono. Reintentando cada segundo…');
       this.#retryTimer = setTimeout(() => this.#open(), RECONNECT_MS);
     };

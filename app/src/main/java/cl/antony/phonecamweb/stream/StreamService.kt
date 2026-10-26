@@ -24,6 +24,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import cl.antony.phonecamweb.MainActivity
 import cl.antony.phonecamweb.net.WebSocketServer
+import java.net.InetAddress
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -49,23 +50,23 @@ class StreamService : LifecycleService() {
     @Volatile
     private var topToRight = false
 
+    private var useFrontCamera = false
+
+    /** Momentos de los últimos reinicios automáticos, para no reintentar sin fin. */
+    private val restartTimes = ArrayDeque<Long>()
+
     private val hub = FrameHub(
         requestKeyframe = { encoder?.requestKeyframe() },
         onSubscribersChanged = { count -> StreamState.update { it.copy(clients = count) } },
     )
 
-    private val server = WebSocketServer(
-        port = PORT,
-        hub = hub,
-        // Fase 1: solo localhost (USB con adb forward). En la fase 4 se abre a Wi‑Fi.
-        log = { Log.i(TAG, it) },
-    )
+    private var server: WebSocketServer? = null
 
     override fun onCreate() {
         super.onCreate()
         startInForeground()
         try {
-            server.start()
+            startServer()
         } catch (e: Exception) {
             fail("No se pudo abrir el puerto $PORT: ${e.message}")
             stopSelf()
@@ -79,7 +80,11 @@ class StreamService : LifecycleService() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        if (intent?.action == ACTION_STOP) stopSelf()
+        when (intent?.action) {
+            ACTION_STOP -> stopSelf()
+            ACTION_SWITCH_CAMERA -> switchCamera()
+            ACTION_RELOAD_NETWORK -> reloadServer()
+        }
         return START_NOT_STICKY
     }
 
@@ -87,9 +92,41 @@ class StreamService : LifecycleService() {
         statsJob?.cancel()
         orientationListener?.disable()
         cameraProvider?.unbindAll() // CameraX suelta la superficie y eso libera el encoder
-        server.stop()
+        server?.stop()
         StreamState.reset(keepError = true)
         super.onDestroy()
+    }
+
+    // ---- Red ----
+
+    /**
+     * Sin Wi‑Fi escucha solo en 127.0.0.1 (el cable, vía adb forward). Con Wi‑Fi escucha en
+     * todas las interfaces y exige el código de acceso a quien no venga del propio teléfono.
+     */
+    private fun startServer() {
+        val wifi = StreamSettings.wifiEnabled(this)
+        val address = if (wifi) InetAddress.getByAddress(byteArrayOf(0, 0, 0, 0)) else LOOPBACK
+        val newServer = WebSocketServer(
+            port = PORT,
+            hub = hub,
+            bindAddress = address,
+            accessCode = { if (wifi) StreamSettings.accessCode(this) else null },
+            log = { Log.i(TAG, it) },
+        )
+        newServer.start()
+        server = newServer
+    }
+
+    /** Cambió la opción de Wi‑Fi o el código: reabrimos el servidor (los clientes reconectan). */
+    private fun reloadServer() {
+        server?.stop()
+        server = null
+        try {
+            startServer()
+        } catch (e: Exception) {
+            fail("No se pudo reabrir el puerto $PORT: ${e.message}")
+            stopSelf()
+        }
     }
 
     // ---- Cámara ----
@@ -98,23 +135,8 @@ class StreamService : LifecycleService() {
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             try {
-                val provider = future.get()
-                val resolution = ResolutionSelector.Builder()
-                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
-                    .setResolutionStrategy(
-                        ResolutionStrategy(
-                            Size(1280, 720),
-                            ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
-                        ),
-                    )
-                    .build()
-                val preview = Preview.Builder().setResolutionSelector(resolution).build()
-                preview.setSurfaceProvider(ContextCompat.getMainExecutor(this)) { request ->
-                    onSurfaceRequested(request)
-                }
-                provider.unbindAll()
-                provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview)
-                cameraProvider = provider
+                cameraProvider = future.get()
+                bindCamera()
             } catch (e: Exception) {
                 fail("No se pudo abrir la cámara: ${e.message}")
                 stopSelf()
@@ -122,8 +144,78 @@ class StreamService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
+    /**
+     * Conecta la cámara elegida (trasera o frontal). Desconectar la anterior hace que
+     * CameraX suelte su superficie, y eso libera el puente y el encoder viejos; la nueva
+     * conexión pide otra superficie y se crea un encoder nuevo. El servidor y los clientes
+     * no se enteran: solo reciben un keyframe nuevo.
+     */
+    private fun bindCamera() {
+        val provider = cameraProvider ?: return
+        val resolution = ResolutionSelector.Builder()
+            .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+            .setResolutionStrategy(
+                ResolutionStrategy(
+                    Size(1280, 720),
+                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER,
+                ),
+            )
+            .build()
+        val preview = Preview.Builder().setResolutionSelector(resolution).build()
+        val front = useFrontCamera
+        preview.setSurfaceProvider(ContextCompat.getMainExecutor(this)) { request ->
+            onSurfaceRequested(request, mirror = front)
+        }
+        val selector = if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
+        provider.unbindAll()
+        provider.bindToLifecycle(this, selector, preview)
+        StreamState.update { it.copy(frontCamera = front) }
+    }
+
+    private fun switchCamera() {
+        val provider = cameraProvider ?: return
+        val target = if (useFrontCamera) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
+        if (!provider.hasCamera(target)) {
+            fail("Este teléfono no tiene esa cámara")
+            return
+        }
+        useFrontCamera = !useFrontCamera
+        try {
+            bindCamera()
+        } catch (e: Exception) {
+            fail("No se pudo cambiar de cámara: ${e.message}")
+        }
+    }
+
+    /**
+     * El encoder falló: reiniciamos cámara y encoder. Si falla demasiadas veces seguidas,
+     * nos detenemos para no dejar la cámara del sistema en mal estado.
+     */
+    private fun recoverFromEncoderError(error: Throwable) {
+        val now = System.currentTimeMillis()
+        restartTimes.addLast(now)
+        while (restartTimes.isNotEmpty() && now - restartTimes.first() > RESTART_WINDOW_MS) restartTimes.removeFirst()
+        if (restartTimes.size > MAX_RESTARTS) {
+            fail("El encoder falló ${restartTimes.size} veces en un minuto: ${error.message}")
+            stopSelf()
+            return
+        }
+        Log.w(TAG, "Error del encoder, reiniciando cámara (${restartTimes.size}/$MAX_RESTARTS)", error)
+        StreamState.update { it.copy(restarts = it.restarts + 1) }
+        cameraProvider?.unbindAll()
+        lifecycleScope.launch {
+            delay(RESTART_DELAY_MS.milliseconds)
+            try {
+                bindCamera()
+            } catch (e: Exception) {
+                fail("No se pudo reiniciar la cámara: ${e.message}")
+                stopSelf()
+            }
+        }
+    }
+
     /** CameraX pide una superficie: creamos el encoder con la resolución que eligió. */
-    private fun onSurfaceRequested(request: SurfaceRequest) {
+    private fun onSurfaceRequested(request: SurfaceRequest, mirror: Boolean) {
         val size = request.resolution
         val newEncoder = try {
             VideoEncoder(
@@ -134,12 +226,8 @@ class StreamService : LifecycleService() {
                     hub.publish(frame)
                 },
                 onError = { e ->
-                    // Un encoder caído no se recupera: detenemos todo para liberar la cámara
-                    // (si no, el servicio de cámara de Android puede quedar bloqueado).
-                    ContextCompat.getMainExecutor(this).execute {
-                        fail("Error del encoder: ${e.message}")
-                        stopSelf()
-                    }
+                    // Un encoder caído no se recupera solo: hay que crear otro.
+                    ContextCompat.getMainExecutor(this).execute { recoverFromEncoderError(e) }
                 },
             )
         } catch (e: Exception) {
@@ -149,7 +237,7 @@ class StreamService : LifecycleService() {
         }
         // La cámara no escribe directo en el encoder: pasa por la GPU (ver GlBridge).
         val bridge = try {
-            GlBridge(newEncoder.inputSurface, size.width, size.height, isTopToRight = { topToRight })
+            GlBridge(newEncoder.inputSurface, size.width, size.height, mirror = mirror, isTopToRight = { topToRight })
         } catch (e: Exception) {
             newEncoder.release()
             request.willNotProvideSurface()
@@ -235,6 +323,12 @@ class StreamService : LifecycleService() {
         private const val CHANNEL_ID = "stream"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "cl.antony.phonecamweb.STOP"
+        private const val ACTION_SWITCH_CAMERA = "cl.antony.phonecamweb.SWITCH_CAMERA"
+        private const val ACTION_RELOAD_NETWORK = "cl.antony.phonecamweb.RELOAD_NETWORK"
+        private val LOOPBACK = InetAddress.getByAddress(byteArrayOf(127, 0, 0, 1))
+        private const val MAX_RESTARTS = 3
+        private const val RESTART_WINDOW_MS = 60_000L
+        private const val RESTART_DELAY_MS = 500L
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, StreamService::class.java))
@@ -242,6 +336,17 @@ class StreamService : LifecycleService() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, StreamService::class.java))
+        }
+
+        /** Aplica cambios de Wi‑Fi o del código. Si el servicio no está corriendo, no hace nada. */
+        fun reloadNetwork(context: Context) {
+            if (!StreamState.status.value.running) return
+            context.startService(Intent(context, StreamService::class.java).setAction(ACTION_RELOAD_NETWORK))
+        }
+
+        /** Alterna entre la cámara trasera y la frontal (el servicio debe estar corriendo). */
+        fun switchCamera(context: Context) {
+            context.startService(Intent(context, StreamService::class.java).setAction(ACTION_SWITCH_CAMERA))
         }
     }
 }

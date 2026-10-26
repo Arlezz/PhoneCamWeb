@@ -9,6 +9,7 @@
 //   node tools/ws-check.mjs                          # ws://127.0.0.1:5000 durante 600 s
 //   node tools/ws-check.mjs ws://127.0.0.1:5000 30   # prueba corta
 //   node tools/ws-check.mjs ws://127.0.0.1:5000 10 --save captura.h264
+//   node tools/ws-check.mjs "ws://192.168.1.20:5000/?code=K7QM-2XPA" 30   # por Wi‑Fi (con comillas)
 //   ffplay -f h264 captura.h264                      # ver lo guardado (opcional)
 //
 // Requiere Node 22 o superior (WebSocket global).
@@ -105,8 +106,14 @@ const ticker = setInterval(() => {
   if (secondsElapsed >= seconds) finish();
 }, 1000);
 
-ws.addEventListener('close', () => {
-  if (secondsElapsed < seconds) { fail(`La conexión se cerró a los ${secondsElapsed} s`); finish(); }
+ws.addEventListener('close', (event) => {
+  if (event.code === 4001) {
+    fail('Código de acceso incorrecto. Usa la dirección que muestra la app, por ejemplo ws://192.168.1.20:5000/?code=K7QM-2XPA');
+    finish();
+  } else if (secondsElapsed < seconds) {
+    fail(`La conexión se cerró a los ${secondsElapsed} s`);
+    finish();
+  }
 });
 ws.addEventListener('error', () => {
   fail(`No se pudo conectar a ${url}. ¿Corriste "adb forward tcp:5000 tcp:5000" y la app está transmitiendo?`);
