@@ -7,6 +7,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.util.Log
 import android.util.Size
+import android.view.OrientationEventListener
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.Preview
 import androidx.camera.core.SurfaceRequest
@@ -33,7 +34,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Servicio en primer plano (tipo `camera`): mantiene la cámara, el encoder y
  * el servidor WebSocket vivos aunque la pantalla se apague o cambies de app.
  *
- * Flujo: CameraX (Preview) → superficie del VideoEncoder → FrameHub → clientes.
+ * Flujo: CameraX (Preview) → GlBridge (GPU) → superficie del VideoEncoder → FrameHub → clientes.
  */
 class StreamService : LifecycleService() {
 
@@ -42,6 +43,11 @@ class StreamService : LifecycleService() {
     private var cameraProvider: ProcessCameraProvider? = null
     private var statsJob: Job? = null
     private val meter = RateMeter()
+    private var orientationListener: OrientationEventListener? = null
+
+    /** Lado hacia el que está acostado el teléfono. Lo lee GlBridge en cada cuadro. */
+    @Volatile
+    private var topToRight = false
 
     private val hub = FrameHub(
         requestKeyframe = { encoder?.requestKeyframe() },
@@ -68,6 +74,7 @@ class StreamService : LifecycleService() {
         StreamState.update { it.copy(running = true, error = null) }
         startCamera()
         startStats()
+        startOrientationTracking()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -78,6 +85,7 @@ class StreamService : LifecycleService() {
 
     override fun onDestroy() {
         statsJob?.cancel()
+        orientationListener?.disable()
         cameraProvider?.unbindAll() // CameraX suelta la superficie y eso libera el encoder
         server.stop()
         StreamState.reset(keepError = true)
@@ -125,20 +133,52 @@ class StreamService : LifecycleService() {
                     meter.record(frame.data.size)
                     hub.publish(frame)
                 },
-                onError = { e -> fail("Error del encoder: ${e.message}") },
+                onError = { e ->
+                    // Un encoder caído no se recupera: detenemos todo para liberar la cámara
+                    // (si no, el servicio de cámara de Android puede quedar bloqueado).
+                    ContextCompat.getMainExecutor(this).execute {
+                        fail("Error del encoder: ${e.message}")
+                        stopSelf()
+                    }
+                },
             )
         } catch (e: Exception) {
             request.willNotProvideSurface()
             fail("No se pudo crear el encoder: ${e.message}")
             return
         }
+        // La cámara no escribe directo en el encoder: pasa por la GPU (ver GlBridge).
+        val bridge = try {
+            GlBridge(newEncoder.inputSurface, size.width, size.height, isTopToRight = { topToRight })
+        } catch (e: Exception) {
+            newEncoder.release()
+            request.willNotProvideSurface()
+            fail("No se pudo iniciar OpenGL: ${e.message}")
+            return
+        }
         encoder = newEncoder
         StreamState.update { it.copy(width = size.width, height = size.height) }
-        request.provideSurface(newEncoder.inputSurface, ContextCompat.getMainExecutor(this)) {
-            // CameraX ya no usa la superficie: ahora sí se puede liberar el encoder.
+        request.provideSurface(bridge.inputSurface, ContextCompat.getMainExecutor(this)) {
+            // CameraX ya no usa la superficie: primero se detiene el dibujo y luego el encoder.
+            bridge.release()
             newEncoder.release()
             if (encoder === newEncoder) encoder = null
         }
+    }
+
+    /**
+     * El video siempre es horizontal; solo falta saber hacia qué lado está acostado el
+     * teléfono para no mostrarlo al revés. Vertical o boca arriba: se mantiene el último lado.
+     */
+    private fun startOrientationTracking() {
+        orientationListener = object : OrientationEventListener(this) {
+            override fun onOrientationChanged(orientation: Int) {
+                when (orientation) {
+                    in 60..120 -> topToRight = true // lado izquierdo arriba: la parte de arriba apunta a la derecha
+                    in 240..300 -> topToRight = false // lado derecho arriba: la parte de arriba apunta a la izquierda
+                }
+            }
+        }.also { if (it.canDetectOrientation()) it.enable() }
     }
 
     // ---- Estado y notificación ----

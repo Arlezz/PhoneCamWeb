@@ -13,3 +13,7 @@
 .externalNativeBuild
 .cxx
 local.properties
+
+# Capturas y logs de diagnóstico
+*.h264
+logcat*.txt
