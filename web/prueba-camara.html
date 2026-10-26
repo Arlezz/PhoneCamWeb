@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhoneCam Web · Prueba de cámara</title>
+  <style>
+    :root { color-scheme: light dark; --bg: #f6f6f4; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #deded8; --accent: #2f6fdb; --err: #c0392b; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #161615; --panel: #1f1f1d; --ink: #ecece8; --muted: #9a9a93; --line: #34342f; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.45 system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--ink); }
+    main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 14px; }
+    h1 { font-size: 20px; margin: 0; }
+    p { margin: 0; color: var(--muted); }
+    .bar { display: flex; gap: 8px; flex-wrap: wrap; }
+    select { flex: 1 1 260px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); font: inherit; }
+    button { padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+    button.secondary { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+    video { width: 100%; aspect-ratio: 16 / 9; background: #000; border-radius: 12px; }
+    pre { margin: 0; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; font: 12.5px/1.5 ui-monospace, monospace; white-space: pre-wrap; }
+    .error { color: var(--err); }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Prueba de cámara</h1>
+  <p>Hace lo mismo que Meet: lista las cámaras, pide la elegida y la muestra.
+    Con la extensión instalada debería aparecer <b>Cámara Android (PhoneCam Web)</b>.</p>
+
+  <div class="bar">
+    <select id="devices" aria-label="Cámara"></select>
+    <button id="start">Usar esta cámara</button>
+    <button id="stop" class="secondary">Detener</button>
+  </div>
+  <p id="error" class="error" role="status"></p>
+  <video id="video" autoplay playsinline muted></video>
+  <pre id="info">Sin cámara activa.</pre>
+</main>
+
+<script type="module">
+  const $ = (id) => document.getElementById(id);
+  let stream = null;
+
+  async function listDevices() {
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    $('devices').innerHTML = '';
+    for (const d of devices) {
+      const option = document.createElement('option');
+      option.value = d.deviceId;
+      option.textContent = d.label || `Cámara sin nombre (${d.deviceId.slice(0, 8) || 'sin permiso'})`;
+      $('devices').append(option);
+    }
+    const phone = devices.find((d) => d.deviceId === 'phonecam-web-android');
+    if (phone) $('devices').value = phone.deviceId;
+    if (!devices.length) $('error').textContent = 'No hay cámaras. ¿Está instalada la extensión?';
+  }
+
+  function stop() {
+    stream?.getTracks().forEach((t) => t.stop());
+    stream = null;
+    $('video').srcObject = null;
+    $('info').textContent = 'Sin cámara activa.';
+  }
+
+  $('start').addEventListener('click', async () => {
+    stop();
+    $('error').textContent = '';
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: $('devices').value }, width: 1280, height: 720 },
+      });
+      $('video').srcObject = stream;
+      const track = stream.getVideoTracks()[0];
+      const update = () => {
+        if (!stream) return;
+        const v = $('video');
+        $('info').textContent = [
+          `Pista:        ${track.label}`,
+          `Estado:       ${track.readyState}`,
+          `deviceId:     ${track.getSettings().deviceId}`,
+          `Video:        ${v.videoWidth}×${v.videoHeight}`,
+          `Cuadros:      ${v.getVideoPlaybackQuality?.().totalVideoFrames ?? '—'}`,
+        ].join('\n');
+      };
+      setInterval(update, 500);
+      update();
+    } catch (e) {
+      $('error').textContent = `${e.name}: ${e.message}`;
+    }
+  });
+  $('stop').addEventListener('click', stop);
+
+  listDevices();
+</script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>PhoneCam Web</title>
+  <style>
+    :root { color-scheme: light dark; --muted: #777; --line: #ccc; --ok: #2e8b57; --warn: #c58b00; --err: #c0392b; }
+    @media (prefers-color-scheme: dark) { :root { --muted: #9a9a93; --line: #444; } }
+    body { width: 300px; margin: 0; padding: 14px 16px 16px; font: 13px/1.45 system-ui, -apple-system, sans-serif; }
+    h1 { font-size: 15px; margin: 0 0 10px; }
+    .status { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+    .dot.conectado { background: var(--ok); }
+    .dot.conectando, .dot.reconectando { background: var(--warn); }
+    .dot.error { background: var(--err); }
+    .detail { color: var(--muted); margin: 0 0 12px; min-height: 1.4em; }
+    label { display: block; font-weight: 600; margin-bottom: 4px; }
+    .row { display: flex; gap: 6px; }
+    input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: 12px ui-monospace, monospace; background: transparent; color: inherit; }
+    button { padding: 6px 10px; border: 0; border-radius: 6px; background: #2f6fdb; color: #fff; font-weight: 600; cursor: pointer; }
+    .saved { color: var(--ok); font-size: 12px; min-height: 1.4em; margin: 4px 0 8px; }
+    .help { color: var(--muted); font-size: 12px; margin: 0; }
+  </style>
+</head>
+<body>
+  <h1>PhoneCam Web</h1>
+  <div class="status"><span id="dot" class="dot"></span><span id="status">Sin uso en esta pestaña</span></div>
+  <p id="detail" class="detail"></p>
+
+  <label for="address">Dirección del teléfono</label>
+  <div class="row">
+    <input id="address" spellcheck="false">
+    <button id="save">Guardar</button>
+  </div>
+  <div id="saved" class="saved"></div>
+
+  <p class="help">En la videollamada, elige <b>Cámara Android (PhoneCam Web)</b> en la configuración de video.
+    Por USB, recuerda correr <code>adb forward tcp:5000 tcp:5000</code>.</p>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "PhoneCam Web",
+  "version": "0.1.0",
+  "description": "Usa la cámara de tu teléfono Android como webcam en el navegador.",
+  "permissions": ["storage"],
+  "action": {
+    "default_title": "PhoneCam Web",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["inject.js"],
+      "world": "MAIN",
+      "run_at": "document_start",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["receiver.js"],
+      "matches": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+      "use_dynamic_url": true
+    }
+  ]
+}
