@@ -68,7 +68,7 @@ class StreamService : LifecycleService() {
         try {
             startServer()
         } catch (e: Exception) {
-            fail("No se pudo abrir el puerto $PORT: ${e.message}")
+            fail(StreamErrorKind.PORT, "No se pudo abrir el puerto $PORT: ${e.message}")
             stopSelf()
             return
         }
@@ -124,7 +124,7 @@ class StreamService : LifecycleService() {
         try {
             startServer()
         } catch (e: Exception) {
-            fail("No se pudo reabrir el puerto $PORT: ${e.message}")
+            fail(StreamErrorKind.PORT, "No se pudo reabrir el puerto $PORT: ${e.message}")
             stopSelf()
         }
     }
@@ -138,7 +138,7 @@ class StreamService : LifecycleService() {
                 cameraProvider = future.get()
                 bindCamera()
             } catch (e: Exception) {
-                fail("No se pudo abrir la cámara: ${e.message}")
+                fail(StreamErrorKind.CAMERA, "No se pudo abrir la cámara: ${e.message}")
                 stopSelf()
             }
         }, ContextCompat.getMainExecutor(this))
@@ -169,21 +169,30 @@ class StreamService : LifecycleService() {
         val selector = if (front) CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
         provider.unbindAll()
         provider.bindToLifecycle(this, selector, preview)
-        StreamState.update { it.copy(frontCamera = front) }
+        StreamState.update {
+            it.copy(frontCamera = front, error = it.error?.takeIf { e -> e.kind.fatal })
+        }
     }
 
     private fun switchCamera() {
         val provider = cameraProvider ?: return
         val target = if (useFrontCamera) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
         if (!provider.hasCamera(target)) {
-            fail("Este teléfono no tiene esa cámara")
+            fail(StreamErrorKind.CAMERA_SWITCH, "Este teléfono no tiene esa cámara")
             return
         }
         useFrontCamera = !useFrontCamera
         try {
             bindCamera()
         } catch (e: Exception) {
-            fail("No se pudo cambiar de cámara: ${e.message}")
+            useFrontCamera = !useFrontCamera // volver a la cámara anterior
+            try {
+                bindCamera()
+                fail(StreamErrorKind.CAMERA_SWITCH, "No se pudo cambiar de cámara: ${e.message}")
+            } catch (e2: Exception) {
+                fail(StreamErrorKind.CAMERA, "No se pudo recuperar la cámara: ${e2.message}")
+                stopSelf()
+            }
         }
     }
 
@@ -196,7 +205,7 @@ class StreamService : LifecycleService() {
         restartTimes.addLast(now)
         while (restartTimes.isNotEmpty() && now - restartTimes.first() > RESTART_WINDOW_MS) restartTimes.removeFirst()
         if (restartTimes.size > MAX_RESTARTS) {
-            fail("El encoder falló ${restartTimes.size} veces en un minuto: ${error.message}")
+            fail(StreamErrorKind.ENCODER, "El encoder falló ${restartTimes.size} veces en un minuto: ${error.message}")
             stopSelf()
             return
         }
@@ -208,7 +217,7 @@ class StreamService : LifecycleService() {
             try {
                 bindCamera()
             } catch (e: Exception) {
-                fail("No se pudo reiniciar la cámara: ${e.message}")
+                fail(StreamErrorKind.CAMERA, "No se pudo reiniciar la cámara: ${e.message}")
                 stopSelf()
             }
         }
@@ -232,7 +241,8 @@ class StreamService : LifecycleService() {
             )
         } catch (e: Exception) {
             request.willNotProvideSurface()
-            fail("No se pudo crear el encoder: ${e.message}")
+            fail(StreamErrorKind.ENCODER, "No se pudo crear el encoder: ${e.message}")
+            stopSelf()
             return
         }
         // La cámara no escribe directo en el encoder: pasa por la GPU (ver GlBridge).
@@ -241,7 +251,8 @@ class StreamService : LifecycleService() {
         } catch (e: Exception) {
             newEncoder.release()
             request.willNotProvideSurface()
-            fail("No se pudo iniciar OpenGL: ${e.message}")
+            fail(StreamErrorKind.ENCODER, "No se pudo iniciar OpenGL: ${e.message}")
+            stopSelf()
             return
         }
         encoder = newEncoder
@@ -281,9 +292,9 @@ class StreamService : LifecycleService() {
         }
     }
 
-    private fun fail(message: String) {
-        Log.e(TAG, message)
-        StreamState.update { it.copy(error = message) }
+    private fun fail(kind: StreamErrorKind, detail: String?) {
+        Log.e(TAG, "$kind: $detail")
+        StreamState.update { it.copy(error = StreamError(kind, detail)) }
     }
 
     private fun startInForeground() {

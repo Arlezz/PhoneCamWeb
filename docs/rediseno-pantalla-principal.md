@@ -6,16 +6,23 @@ me está viendo? y ¿cómo me conecto? El cambio central es una **píldora de es
 derivada de los datos, debajo de la vista previa, con la acción principal pegada
 a ella. Todo lo técnico (fps, bitrate, comandos adb) se va a una sección plegable.
 
+Identidad visual: dirección **D · Directo** del lienzo de branding (base grafito,
+cobalto para las acciones y la luz roja de transmisión solo para "En vivo").
+
 Archivos a modificar:
 
 - `app/src/main/java/cl/antony/phonecamweb/MainActivity.kt` (pantalla completa)
 - `app/src/main/java/cl/antony/phonecamweb/stream/StreamState.kt` (tipo del error)
 - `app/src/main/java/cl/antony/phonecamweb/stream/StreamService.kt` (llamadas a `fail`)
-- `app/src/main/java/cl/antony/phonecamweb/ui/theme/Color.kt` y `Theme.kt` (paleta de marca)
+- `app/src/main/java/cl/antony/phonecamweb/ui/theme/Color.kt`, `Theme.kt` y `Type.kt` (paleta y fuentes de marca)
 - `app/src/main/res/values/strings.xml` (textos)
-- `app/src/main/res/drawable/` (íconos nuevos)
+- `app/src/main/res/drawable/` (íconos nuevos y capas del ícono de la app)
+- `app/src/main/res/font/` (Space Grotesk y JetBrains Mono)
+- `app/src/main/res/mipmap-*/` (ícono de la app)
+- `extension/manifest.json`, `extension/popup.html` y `extension/icons/` (ícono y colores de la extensión)
 
-Documento hermano: ninguno. La extensión de Chrome no cambia (ver "Fuera de alcance").
+Documento hermano: ninguno. La lógica de la extensión de Chrome no cambia; solo su
+ícono y sus colores (ver 4.12).
 
 Todo el texto de interfaz va en **español neutro** (tú, nunca vos): "Conecta",
 "Ciérrala", "ejecuta".
@@ -232,27 +239,26 @@ status.error?.kind == StreamErrorKind.CAMERA_SWITCH`.
 ### 4.1 Vertical (anatomía)
 
 ```
-┌──────────────────────────────────────────┐  padding: 16 dp lados, 12 dp arriba
-│ PhoneCam Web                             │  titleLarge
-│                                          │  16 dp
-│ ┌──────────────────────────────────────┐ │
-│ │                                      │ │  Vista previa 16:9, esquinas 16 dp
-│ │           (cámara o marcador)        │ │  ancho completo (~380 × 214 dp)
-│ │                                      │ │
-│ └──────────────────────────────────────┘ │
-│                                          │  16 dp
-│ ( ● En vivo · 1 navegador )              │  Píldora  ─ o ─  Banner de error
-│                                          │  12 dp
+┌──────────────────────────────────────────┐
+│ PhoneCam [● Web]           [Cable|Wi‑Fi] │  Encabezado: padding 16 dp lados, 12 dp arriba y abajo
+├──────────────────────────────────────────┤
+│ (● En vivo · 1 navegador)                │  Vista previa 16:9 a todo el ancho, sin esquinas
+│                                          │  (~412 × 232 dp). Píldora encima, a 12 dp del
+│           (cámara o marcador)            │  borde superior y del izquierdo
+│                                          │
+├──────────────────────────────────────────┤
+│                                          │  16 dp. Desde aquí, padding 16 dp a los lados
+│ [ Banner de error, solo en Failed ]      │  + 12 dp hasta la acción
 │ ┌────────────────────────────┐  ┌──────┐ │
 │ │          Detener           │  │  ⟲   │ │  56 dp de alto; gap 12 dp
 │ └────────────────────────────┘  └──────┘ │  (detenido: "Iniciar cámara" a ancho completo)
 │                                          │  16 dp
-│ ┌ Conexión ─────────── [Cable | Wi‑Fi] ┐ │  Card, padding 16 dp, gap 12 dp
-│ │ Dirección                            │ │
+│ ┌──────────────────────────────────────┐ │  Tarjeta "ticket": padding 20 dp, gap 16 dp
+│ │ DIRECCIÓN                       [⧉]  │ │
 │ │ 192.168.1.34:5000                    │ │
-│ │ Código                               │ │
-│ │ ABCD-EFGH                            │ │
-│ │ [⧉ Copiar dirección] [↻ Nuevo código]│ │
+│ │ ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄ │ │
+│ │ CÓDIGO                               │ │
+│ │ [ABCD-EFGH]          ↻ Nuevo código  │ │
 │ │ El video viaja sin cifrar: usa …     │ │
 │ └──────────────────────────────────────┘ │
 │                                          │  8 dp
@@ -260,33 +266,41 @@ status.error?.kind == StreamErrorKind.CAMERA_SWITCH`.
 └──────────────────────────────────────────┘
 ```
 
-Alto estimado transmitiendo por Wi‑Fi: **~740 dp**. Cabe en ~840 dp sin scroll.
+Alto estimado transmitiendo por Wi‑Fi: **~670 dp**. Cabe en ~840 dp sin scroll.
 Se mantiene `verticalScroll` en la columna para pantallas chicas y para cuando
 "Detalles técnicos" está abierto.
+
+Encabezado: a la izquierda la marca (ver 4.11): "PhoneCam" y una etiqueta
+`primaryContainer` (esquinas 8 dp, padding 7 × 1 dp) con un punto de 6 dp en
+`StatusColors.tally` y "Web". La marca se agrupa con
+`Modifier.semantics(mergeDescendants = true) { heading() }`. A la derecha, el
+selector Cable/Wi‑Fi (ver 4.7).
 
 ### 4.2 Horizontal (anatomía)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│ ┌───────────────────────────────────────────┐  PhoneCam Web         │
-│ │                                           │  ( ● Esperando … )    │
-│ │        Vista previa 16:9                  │  [ Detener ] [ ⟲ ]    │
-│ │        alto completo (~600 × 340 dp)      │  ┌ Wi‑Fi ─────────┐   │
-│ │                                           │  │ 192.168.1.34:… │   │
-│ │                                           │  │ Código ABCD-…  │   │
+│ ┌───────────────────────────────────────────┐  PhoneCam [● Web]     │
+│ │ (● Esperando conexión)                    │  [ Detener ] [ ⟲ ]    │
+│ │        Vista previa 16:9                  │  ┌ Wi‑Fi ─────────┐   │
+│ │        alto completo (~600 × 340 dp)      │  │ 192.168.1.34:… │   │
+│ │                                           │  │ CÓDIGO ABCD-…  │   │
 │ └───────────────────────────────────────────┘  └────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
 - `Row` con padding 16 dp y gap 16 dp.
-- Vista previa: `Modifier.fillMaxHeight().aspectRatio(16f / 9f, matchHeightConstraintsFirst = true)`.
+- Vista previa: `Modifier.fillMaxHeight().aspectRatio(16f / 9f, matchHeightConstraintsFirst = true)`,
+  esquinas de 12 dp y la píldora encima, igual que en vertical.
   El `matchHeightConstraintsFirst` es lo que hace que el alto mande; sin él, toma
   el ancho y se sale por abajo.
-- Columna derecha: `weight(1f)`, `verticalScroll`, gap 12 dp. Contiene título,
-  píldora o banner, acción principal y tarjeta de conexión **compacta**.
-- La tarjeta compacta no tiene selector Cable/Wi‑Fi ni botones: muestra
-  "Wi‑Fi" + dirección + "Código ABCD-EFGH", o "Cable" + la línea de ayuda del
-  cable. Cambiar de modo se hace en vertical.
+- Columna derecha: `weight(1f)`, `verticalScroll`, gap 12 dp. Contiene la marca
+  (sin selector), el banner si hay error, la acción principal y la tarjeta de
+  conexión **compacta**.
+- La tarjeta compacta usa el estilo del ticket (4.7) pero no tiene selector ni
+  botones: muestra "Wi‑Fi" + dirección + "CÓDIGO ABCD-EFGH", "Wi‑Fi" + el aviso
+  ámbar si no hay red, o "Cable" + la línea de ayuda del cable. Cambiar de modo se
+  hace en vertical.
 - No hay "Detalles técnicos" en horizontal.
 
 ### 4.3 Vista previa
@@ -296,27 +310,33 @@ Se mantiene `verticalScroll` en la columna para pantallas chicas y para cuando
 | `!status.running` | `Box` con fondo `surfaceContainerHighest`, ícono `ic_videocam_off` 40 dp en `onSurfaceVariant` y texto "Cámara apagada" (`bodyMedium`) debajo, 8 dp de gap, centrado |
 | `status.running` | `CameraPreview()` actual (SurfaceView), con fondo negro mientras llega el primer cuadro |
 
-Ambos con `clip(RoundedCornerShape(16.dp))`.
+En vertical va a todo el ancho y sin esquinas; en horizontal, con
+`clip(RoundedCornerShape(12.dp))`. En todos los estados salvo `Failed`, la píldora
+(4.4) se dibuja encima, alineada arriba a la izquierda con 12 dp de margen.
 
 ### 4.4 Píldora de estado
 
-`Surface(shape = CircleShape)`, alto 32 dp, padding horizontal 12 dp, punto de
-8 dp + gap 8 dp + texto `labelLarge`.
+`Surface(shape = RoundedCornerShape(8.dp))`, alto 32 dp, padding 10 dp al inicio y
+12 dp al final, punto de 8 dp + gap 8 dp + texto Space Grotesk SemiBold 14 sp.
+Siempre va sobre la vista previa, así que su fondo es sólido en todos los estados.
 
 | Estado | Texto | Fondo (claro / oscuro) | Texto (claro / oscuro) | Punto (claro / oscuro) |
 | --- | --- | --- | --- | --- |
-| `Off` | Apagada | `surfaceContainerHighest` | `onSurfaceVariant` | `#888780` / `#888780` |
-| `Starting` | Iniciando… | `surfaceContainerHighest` | `onSurfaceVariant` | `onSurfaceVariant` |
-| `Waiting` | Esperando conexión | `#FAEEDA` / `#633806` | `#633806` / `#FAC775` | `#BA7517` / `#EF9F27` |
-| `Live(n)` | En vivo · n navegador(es) | `primaryContainer` | `onPrimaryContainer` | `#1D9E75` / `#5DCAA5` |
+| `Off` | Apagada | `surface` | `onSurfaceVariant` | `#8A9099` / `#8A9099` |
+| `Starting` | Iniciando… | `surface` | `onSurfaceVariant` | `onSurfaceVariant` |
+| `Waiting` | Esperando conexión | `#FFF1D6` / `#4A3200` | `#6B4500` / `#FFD58A` | `#D98E04` / `#F2B33D` |
+| `Live(n)` | En vivo · n navegador(es) | `#1F2328` / `#F2F3F5` | `#FFFFFF` / `#16181B` | `#FF5F61` / `#E5383B` |
 
-Los colores fijos (ámbar y puntos) van en `Color.kt` como `StatusColors` (ver 4.9),
-no sueltos en `MainActivity.kt`.
+La píldora en vivo va invertida respecto del tema (oscura en claro, clara en
+oscuro): así el rojo de transmisión no se confunde con el banner de error, que es
+un rectángulo rosado con ícono. Los colores fijos van en `Color.kt` como
+`StatusColors` (ver 4.9), no sueltos en `MainActivity.kt`.
 
 ### 4.5 Banner de error (estado `Failed`)
 
-Ocupa el lugar de la píldora. `Surface(color = errorContainer, shape =
-RoundedCornerShape(16.dp))`, padding 16 dp, `Row` con ícono `ic_error` 24 dp
+Va debajo de la vista previa y antes de la acción principal, con 12 dp de
+separación; en `Failed` no se dibuja la píldora. `Surface(color = errorContainer,
+shape = RoundedCornerShape(16.dp))`, padding 16 dp, `Row` con ícono `ic_error` 24 dp
 (`onErrorContainer`) + gap 12 dp + `Column` (título `titleSmall`, ayuda
 `bodyMedium`, ambos `onErrorContainer`).
 
@@ -345,22 +365,28 @@ principal. No usa `errorContainer`: la transmisión sigue funcionando.
 | `Failed(*)` | `Button` "Reintentar", ancho completo, alto 56 dp (misma acción que Iniciar) |
 | `Starting`, `Waiting`, `Live` | `Row`: `OutlinedButton` "Detener" (`weight(1f)`, alto 56 dp) + gap 12 dp + `FilledTonalIconButton` 56 × 56 dp con `ic_cameraswitch` 24 dp |
 
+Los tres llevan `RoundedCornerShape(12.dp)` y el texto en Space Grotesk SemiBold
+15 sp.
+
 El botón de cámara usa `contentDescription` "Usar cámara frontal" o "Usar cámara
 trasera" según `status.frontCamera`, y está deshabilitado mientras
 `status.width == 0` (no hay cámara conectada todavía).
 
-### 4.7 Tarjeta de conexión (vertical)
+### 4.7 Selector de modo y tarjeta "ticket" (vertical)
 
-`Card` con color `surfaceContainerLow`, padding 16 dp, gap 12 dp.
+Selector: `SingleChoiceSegmentedButtonRow` con dos `SegmentedButton`, "Cable" y
+"Wi‑Fi", en el encabezado (4.1). Reemplaza al `Switch` de la versión anterior.
 
-Encabezado: `Row` con "Conexión" (`titleMedium`) a la izquierda y
-`SingleChoiceSegmentedButtonRow` con dos `SegmentedButton`: "Cable" y "Wi‑Fi", a
-la derecha. Reemplaza al `Switch`.
+Tarjeta: `Card` con color `surfaceContainerLow`, borde de 1 dp en `outlineVariant`,
+esquinas de 16 dp, padding 20 dp y gap 16 dp. No tiene título.
+
+Las etiquetas "Dirección" y "Código" van en JetBrains Mono 11 sp, en mayúsculas,
+con espaciado de 0.08 em y color `onSurfaceVariant`.
 
 | Modo | Contenido |
 | --- | --- |
-| Cable | Una línea `bodyMedium`: "Conecta el cable y ejecuta tools/usb-forward.sh en la Mac." (`tools/usb-forward.sh` en monoespaciada vía `AnnotatedString`) |
-| Wi‑Fi, con `wifiIp` | Etiqueta "Dirección" (`labelMedium`, `onSurfaceVariant`) + `"$wifiIp:5000"` (monoespaciada, 15 sp). Etiqueta "Código" + `accessCode` (monoespaciada, 15 sp). `Row` con dos `OutlinedButton` de alto 40 dp e ícono 18 dp: "Copiar dirección" (`ic_content_copy`) y "Nuevo código" (`ic_refresh`). Al final, en `bodySmall` `onSurfaceVariant`: "El video viaja sin cifrar: usa Wi‑Fi solo en redes de confianza." |
+| Cable | Una línea `bodyMedium`: "Conecta el cable y ejecuta tools/usb-forward.sh en la Mac." (`tools/usb-forward.sh` en JetBrains Mono vía `AnnotatedString`) |
+| Wi‑Fi, con `wifiIp` | Fila: etiqueta "Dirección" + `"$wifiIp:5000"` (JetBrains Mono Medium 19 sp) a la izquierda, y `FilledIconButton` de 48 dp, esquinas de 12 dp, con `ic_content_copy` y `contentDescription` "Copiar dirección" a la derecha. Línea punteada de 1 dp en `outlineVariant`. Fila: etiqueta "Código" + el código en un `Surface` `primaryContainer` (esquinas 10 dp, padding 12 × 6 dp, JetBrains Mono Medium 19 sp, espaciado 0.08 em) a la izquierda, y `TextButton` con `ic_refresh` 18 dp y "Nuevo código" a la derecha. Al final, en `bodySmall` `onSurfaceVariant`: "El video viaja sin cifrar: usa Wi‑Fi solo en redes de confianza." |
 | Wi‑Fi, `wifiIp == null` | Solo la línea "Conecta el teléfono a la misma red Wi‑Fi que la Mac." en `bodyMedium`, color del texto ámbar de `Waiting`. No es un error rojo: es una condición del entorno, no una falla de la app. |
 
 La dirección y el código se muestran también con la cámara apagada, para poder
@@ -368,9 +394,9 @@ prepararlos en la Mac antes de iniciar.
 
 ### 4.8 Detalles técnicos (solo vertical)
 
-Fila clickeable de 48 dp: "Detalles técnicos" (`titleSmall`) + `ic_expand_more`
-24 dp que rota 180° al abrir. Contenido con `AnimatedVisibility`, reusa
-`StatRow`:
+Fila clickeable de 48 dp: "Detalles técnicos" (Space Grotesk SemiBold 14 sp) +
+`ic_expand_more` 24 dp que rota 180° al abrir. Contenido con `AnimatedVisibility`,
+reusa `StatRow` (valores en JetBrains Mono):
 
 | Etiqueta | Valor |
 | --- | --- |
@@ -383,37 +409,39 @@ Fila clickeable de 48 dp: "Detalles técnicos" (`titleSmall`) + `ic_expand_more`
 | Puerto | 5000 |
 | Último error | `status.error?.detail` (solo si existe) |
 
-Debajo, en monoespaciada y dentro de `SelectionContainer`:
+Debajo, en JetBrains Mono y dentro de `SelectionContainer`:
 
 - "Cable manual: adb forward tcp:5000 tcp:5000"
 - Si Wi‑Fi con IP: "URL completa: ws://IP:5000/?code=CODE"
 
 ### 4.9 Tema de marca
 
-En `Color.kt`, borrar los colores de la plantilla y definir la paleta teal.
-`dynamicColor` pasa a `false` y se quita el parámetro (el usuario eligió color de
-marca propio).
+En `Color.kt` va la paleta D. `dynamicColor` sigue en `false` y sin parámetro (el
+usuario eligió color de marca propio).
 
 | Rol | Claro | Oscuro |
 | --- | --- | --- |
-| primary | `0xFF0F6E56` | `0xFF5DCAA5` |
-| onPrimary | `0xFFFFFFFF` | `0xFF04342C` |
-| primaryContainer | `0xFFE1F5EE` | `0xFF085041` |
-| onPrimaryContainer | `0xFF085041` | `0xFF9FE1CB` |
-| secondaryContainer | `0xFFCDE8DF` | `0xFF334B44` |
-| onSecondaryContainer | `0xFF07201A` | `0xFFCDE8DF` |
-| background, surface | `0xFFF7FAF8` | `0xFF0F1513` |
-| surfaceContainerLow | `0xFFF1F5F3` | `0xFF171D1B` |
-| surfaceContainer | `0xFFEBF0EE` | `0xFF1B211F` |
-| surfaceContainerHighest | `0xFFE0E6E3` | `0xFF303634` |
-| onSurface, onBackground | `0xFF181D1B` | `0xFFDEE4E1` |
-| onSurfaceVariant | `0xFF3F4945` | `0xFFBFC9C4` |
-| outline | `0xFF6F7975` | `0xFF89938F` |
-| outlineVariant | `0xFFBFC9C4` | `0xFF3F4945` |
+| primary | `0xFF2350D8` | `0xFFB3C5FF` |
+| onPrimary | `0xFFFFFFFF` | `0xFF0A2463` |
+| primaryContainer | `0xFFE3EAFF` | `0xFF1E3D9E` |
+| onPrimaryContainer | `0xFF0E2A7A` | `0xFFDCE4FF` |
+| secondaryContainer | `0xFFDCE4F9` | `0xFF35415F` |
+| onSecondaryContainer | `0xFF12204A` | `0xFFDCE4F9` |
+| background, surface | `0xFFF6F7F8` | `0xFF202327` |
+| surfaceContainerLow (tarjeta) | `0xFFFFFFFF` | `0xFF2A2E33` |
+| surfaceContainer | `0xFFEEF0F2` | `0xFF2E3238` |
+| surfaceContainerHigh (diálogo) | `0xFFE8EAED` | `0xFF33383E` |
+| surfaceContainerHighest | `0xFFDEE1E5` | `0xFF3A3F46` |
+| onSurface, onBackground | `0xFF16181B` | `0xFFE6E8EB` |
+| onSurfaceVariant | `0xFF4A5058` | `0xFFAEB4BB` |
+| outline | `0xFF737A83` | `0xFF858C94` |
+| outlineVariant | `0xFFD3D7DC` | `0xFF464B53` |
 
-Las superficies se definen explícitamente porque las de `lightColorScheme()` por
-defecto tienen tinte morado. Los roles de error quedan con los valores por defecto
-de Material 3.
+`surfaceContainerLow` es blanco en claro y un tono más claro que el fondo en
+oscuro: en los dos modos la tarjeta se ve por encima del fondo. El modo oscuro es
+gris grafito, no negro. Las superficies se definen explícitamente porque las de
+`lightColorScheme()` por defecto tienen tinte morado. Los roles de error quedan con
+los valores por defecto de Material 3.
 
 Colores de estado, fuera del `ColorScheme`:
 
@@ -421,11 +449,22 @@ Colores de estado, fuera del `ColorScheme`:
 @Immutable
 data class StatusColors(
     val waitingContainer: Color, val onWaiting: Color, val waitingDot: Color,
-    val liveDot: Color, val offDot: Color,
+    val liveContainer: Color, val onLive: Color, val liveDot: Color,
+    val offDot: Color,
+    /** Punto rojo de la marca, en el encabezado. */
+    val tally: Color,
 )
 
-val LightStatusColors = StatusColors(Color(0xFFFAEEDA), Color(0xFF633806), Color(0xFFBA7517), Color(0xFF1D9E75), Color(0xFF888780))
-val DarkStatusColors  = StatusColors(Color(0xFF633806), Color(0xFFFAC775), Color(0xFFEF9F27), Color(0xFF5DCAA5), Color(0xFF888780))
+val LightStatusColors = StatusColors(
+    Color(0xFFFFF1D6), Color(0xFF6B4500), Color(0xFFD98E04),
+    Color(0xFF1F2328), Color(0xFFFFFFFF), Color(0xFFFF5F61),
+    Color(0xFF8A9099), Color(0xFFE5383B),
+)
+val DarkStatusColors = StatusColors(
+    Color(0xFF4A3200), Color(0xFFFFD58A), Color(0xFFF2B33D),
+    Color(0xFFF2F3F5), Color(0xFF16181B), Color(0xFFE5383B),
+    Color(0xFF8A9099), Color(0xFFFF5F61),
+)
 
 val LocalStatusColors = staticCompositionLocalOf { LightStatusColors }
 ```
@@ -434,24 +473,72 @@ val LocalStatusColors = staticCompositionLocalOf { LightStatusColors }
 
 ### 4.10 Íconos
 
-`material3` 1.4 ya no trae `material-icons-core` y no se agrega una dependencia
-por seis íconos. Van como VectorDrawable en `res/drawable/`, convertidos desde
-Material Symbols Outlined, peso 400, 24 px (paquete npm `@material-symbols/svg-400`,
-carpeta `outlined/`), y se usan con `painterResource`:
+Íconos de interfaz: `material3` 1.4 ya no trae `material-icons-core` y no se agrega
+una dependencia por seis íconos. Van como VectorDrawable en `res/drawable/`,
+convertidos desde Material Symbols Outlined, peso 400 (paquete npm
+`@material-symbols/svg-400`, carpeta `outlined/`; el paquete solo trae el tamaño
+óptico de 48 px), y se usan con `painterResource`:
 
 `ic_videocam_off`, `ic_cameraswitch`, `ic_content_copy`, `ic_refresh`,
-`ic_error`, `ic_expand_more`.
+`ic_error`, `ic_expand_more` (este último sale de `keyboard_arrow_down`: el paquete
+no trae `expand_more`).
 
 No agregues `android:tint` a los vectores: el color lo pone el `Icon` de Compose
 con su `tint`.
+
+Ícono de la app (ícono adaptable, `mipmap-anydpi-v26/ic_launcher.xml` e
+`ic_launcher_round.xml`), en la grilla de 108 dp:
+
+| Capa | Contenido |
+| --- | --- |
+| Fondo (`ic_launcher_background`) | Color sólido `#30353C` |
+| Primer plano (`ic_launcher_foreground`) | Teléfono acostado: cuerpo en 24,37 de 60 × 34 con esquinas de 8, en `#E6E8EB`. Pantalla: 33,40 de 47 × 28 con esquinas de 3, en `#2350D8`. Luz roja junto a la cámara: círculo en 28.5,54, radio 2.6, `#FF4D4F`. Persona en la pantalla, en `#DCE4FF`: cabeza en 56.5,51.5, radio 5.5, y hombros desde 45,68 hasta 68,68 con la parte alta en 56.5,59 |
+| Monocromo (`ic_launcher_monochrome`) | El teléfono con recortes (pantalla y luz roja) y la persona sólida dentro de la pantalla, en un solo color. Android 13+ lo tiñe en el ícono temático |
+
+Se descartó una ventana cuadrada con una lente centrada: junto con la luz roja en
+la esquina, se confundía con el ícono de Instagram.
+
+Android 7.1 y anteriores (minSdk 23) no usan el ícono adaptable: los
+`mipmap-*/ic_launcher.png` e `ic_launcher_round.png` se generan desde la misma
+geometría (48, 72, 96, 144 y 192 px), en cuadrado redondeado y en círculo.
+Reemplazan a los `.webp` de la plantilla.
+
+### 4.11 Tipografía
+
+Fuentes incluidas en `res/font/` desde Google Fonts (licencia OFL):
+`space_grotesk_semibold.ttf`, `jetbrains_mono_regular.ttf` y
+`jetbrains_mono_medium.ttf` (~293 KB en total). En `Type.kt` se exponen como
+`SpaceGrotesk` y `JetBrainsMono`. El resto de la interfaz sigue en Roboto, la
+fuente del sistema.
+
+| Uso | Fuente |
+| --- | --- |
+| Marca del encabezado | Space Grotesk SemiBold 20 sp ("Web": 14 sp) |
+| Píldora, acción principal, "Detalles técnicos" | Space Grotesk SemiBold (14, 15 y 14 sp) |
+| Etiquetas "Dirección" y "Código" | JetBrains Mono Regular 11 sp, mayúsculas |
+| Dirección, código, valores de detalles y comandos | JetBrains Mono (Medium 19 sp en el ticket) |
+
+### 4.12 Extensión de Chrome
+
+- Ícono: la misma geometría que el primer plano de la app sobre el fondo
+  `#30353C`, en cuadrado redondeado (radio de 22 % del lado). PNG de 16, 32, 48 y
+  128 px en `extension/icons/`; en el de 16 px el teléfono, la luz roja y la persona se
+  agrandan un poco para que se lean. `manifest.json` los declara en `icons` y en `action.default_icon`.
+- Popup: mismos colores que la app, claro u oscuro según el sistema. El botón
+  "Guardar" usa `primary` / `onPrimary`. Punto de estado: `conectado`
+  ("Transmitiendo") en el rojo de transmisión, `conectando` y `reconectando` en
+  ámbar, `desconectado` en `#8A9099`, y `error` como anillo hueco en el color de
+  error de Material 3, para que no dependa solo del color distinguirlo de
+  "Transmitiendo".
+- Las fuentes no se incluyen en la extensión: usa `system-ui` y `ui-monospace`.
 
 ---
 
 ## 5. Reglas de comportamiento
 
-1. **El orden no cambia entre estados.** Vista previa → píldora/banner → acción →
-   conexión → detalles. Así el pulgar encuentra "Detener" siempre en el mismo
-   lugar.
+1. **El orden no cambia entre estados.** Vista previa (con la píldora encima) →
+   banner (solo con error) → acción → conexión → detalles. Así el pulgar encuentra
+   "Detener" siempre en el mismo lugar.
 2. **La acción principal queda siempre dentro de la primera pantalla**, sin
    scroll, en vertical y en horizontal. Es el motivo del rediseño.
 3. **"Iniciar cámara" y "Reintentar"** hacen lo mismo: `permissionDenied = false`;
@@ -513,6 +600,18 @@ En `ui/theme/Theme.kt`: el parámetro `dynamicColor`, la rama
 
 En `stream/StreamService.kt`: la firma `fail(message: String)`.
 
+### 6.1 Al pasar a la identidad D
+
+- En `ui/theme/Color.kt`: la paleta teal y los `StatusColors` anteriores (los
+  reemplaza la paleta D).
+- En `MainActivity.kt`: el título `titleLarge` (lo reemplaza la marca del
+  encabezado), el título "Conexión" de la tarjeta y el selector dentro de ella
+  (pasa al encabezado), y los usos de `FontFamily.Monospace` (pasan a
+  `JetBrainsMono`).
+- En `strings.xml`: `connection_title`.
+- `res/drawable-v24/ic_launcher_foreground.xml`, el `ic_launcher_background.xml` de
+  la plantilla y los `mipmap-*/*.webp` (ver 4.10).
+
 ---
 
 ## 7. Textos
@@ -521,6 +620,8 @@ Todos en `res/values/strings.xml`, nada en duro en Kotlin.
 
 | Clave | Texto |
 | --- | --- |
+| `wordmark_main` | PhoneCam (`translatable="false"`) |
+| `wordmark_suffix` | Web (`translatable="false"`) |
 | `camera_off` | Cámara apagada |
 | `status_off` | Apagada |
 | `status_starting` | Iniciando… |
@@ -530,7 +631,6 @@ Todos en `res/values/strings.xml`, nada en duro en Kotlin.
 | `action_stop` | Detener |
 | `cd_use_front` | Usar cámara frontal |
 | `cd_use_back` | Usar cámara trasera |
-| `connection_title` | Conexión |
 | `mode_cable` | Cable |
 | `mode_wifi` | Wi‑Fi |
 | `cable_help` | Conecta el cable y ejecuta %1$s en la Mac. |
@@ -580,17 +680,18 @@ Plural (usar `pluralStringResource`; español tiene `one`, `many` y `other`, y
 </plurals>
 ```
 
-Se reusa: `app_name` ("PhoneCam Web") para el título; `StreamService.PORT` para
-el puerto (no escribir `5000` en duro).
+Se reusa: `StreamService.PORT` para el puerto (no escribir `5000` en duro). La
+marca del encabezado usa `wordmark_main` y `wordmark_suffix`, no `app_name`.
 
 ---
 
 ## 8. Criterios de aceptación
 
 1. En vertical, con la cámara apagada y modo Wi‑Fi, se ven: el marcador "Cámara
-   apagada", la píldora gris "Apagada", el botón "Iniciar cámara", y la tarjeta
-   con dirección `IP:5000` y código en líneas separadas. Fuera de "Detalles
-   técnicos" no aparece ninguno de estos textos: `ws://`, `adb`, `kbps`, `fps`.
+   apagada" con la píldora "Apagada" encima, el botón "Iniciar cámara", y la
+   tarjeta con dirección `IP:5000` y código en líneas separadas. Fuera de
+   "Detalles técnicos" no aparece ninguno de estos textos: `ws://`, `adb`, `kbps`,
+   `fps`.
 2. Al tocar "Iniciar cámara", la píldora pasa por "Iniciando…" y luego a
    "Esperando conexión" en ámbar. El botón "Detener" se ve sin hacer scroll en el
    S25 Ultra, en vertical y en horizontal.
@@ -608,14 +709,24 @@ el puerto (no escribir `5000` en duro).
    con "Abrir ajustes" y el botón "Reintentar". Con la cámara ocupada por otra app,
    aparece "No se pudo abrir la cámara." y el texto de la excepción aparece solo
    en "Detalles técnicos" → "Último error".
-8. En horizontal, la vista previa ocupa todo el alto en 16:9 y los controles
-   quedan a la derecha sin selector Cable/Wi‑Fi ni detalles. Girar el teléfono
-   mientras Meet está conectado no corta el video ni cambia el contador.
+8. En horizontal, la vista previa ocupa todo el alto en 16:9 con la píldora
+   encima, y los controles quedan a la derecha sin selector Cable/Wi‑Fi ni
+   detalles. Girar el teléfono mientras Meet está conectado no corta el video ni
+   cambia el contador.
 9. "Detalles técnicos" está plegado al abrir la app; si se abre, sigue abierto
    después de girar a horizontal y volver a vertical.
-10. En modo oscuro y en modo claro la app usa la paleta teal; no aparece ningún
-    morado (botones, segmentado, superficies), incluso con el fondo de pantalla
-    del teléfono en otro color.
+10. En modo oscuro y en modo claro la app usa la paleta D (grafito, cobalto y el
+    rojo solo en "En vivo"); no aparece morado ni teal (botones, segmentado,
+    superficies, diálogo), incluso con el fondo de pantalla del teléfono en otro
+    color. El modo oscuro es gris grafito, no negro.
+11. El ícono de la app muestra el teléfono acostado con la persona en pantalla y la
+    luz roja en el lanzador. Con los íconos temáticos activados (Android 13+) se ve la versión
+    monocroma.
+12. La marca del encabezado, la píldora y la acción principal usan Space Grotesk;
+    la dirección y el código usan JetBrains Mono, también sin conexión a internet.
+13. La extensión muestra el ícono nuevo en la barra de Chrome y en
+    `chrome://extensions`. El popup usa los colores de D en claro y oscuro, y un
+    error se distingue de "Transmitiendo" sin depender solo del color.
 
 ---
 

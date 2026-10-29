@@ -1,7 +1,6 @@
 package cl.antony.phonecamweb.stream
 
 import android.view.Surface
-import java.util.concurrent.CopyOnWriteArraySet
 
 /**
  * Conecta la vista previa de la pantalla (MainActivity) con el puente OpenGL del servicio.
@@ -15,11 +14,13 @@ object PreviewOutput {
     var surface: Surface? = null
         private set
 
-    private val listeners = CopyOnWriteArraySet<(Surface?) -> Unit>()
+    /** Solo un puente dibuja en la vista previa: una Surface acepta un único productor a la vez. */
+    @Volatile
+    private var listener: ((Surface?) -> Unit)? = null
 
     fun attach(surface: Surface) {
         this.surface = surface
-        listeners.forEach { it(surface) }
+        listener?.invoke(surface)
     }
 
     /**
@@ -28,10 +29,20 @@ object PreviewOutput {
      */
     fun detach() {
         surface = null
-        listeners.forEach { it(null) }
+        listener?.invoke(null)
     }
 
-    internal fun addListener(listener: (Surface?) -> Unit) = listeners.add(listener)
+    /**
+     * El puente nuevo (por ejemplo, al cambiar de cámara) reemplaza al anterior. El anterior suelta
+     * la superficie primero; si no, Android rechaza la conexión del nuevo y la vista previa se congela.
+     */
+    internal fun setListener(newListener: (Surface?) -> Unit) {
+        listener?.invoke(null)
+        listener = newListener
+        surface?.let(newListener)
+    }
 
-    internal fun removeListener(listener: (Surface?) -> Unit) = listeners.remove(listener)
+    internal fun removeListener(oldListener: (Surface?) -> Unit) {
+        if (listener === oldListener) listener = null
+    }
 }

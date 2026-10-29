@@ -4,21 +4,34 @@
   <meta charset="utf-8">
   <title>PhoneCam Web</title>
   <style>
-    :root { color-scheme: light dark; --muted: #777; --line: #ccc; --ok: #2e8b57; --warn: #c58b00; --err: #c0392b; }
-    @media (prefers-color-scheme: dark) { :root { --muted: #9a9a93; --line: #444; } }
-    body { width: 300px; margin: 0; padding: 14px 16px 16px; font: 13px/1.45 system-ui, -apple-system, sans-serif; }
+    /* Paleta de la identidad D, la misma de la app. */
+    :root {
+      color-scheme: light dark;
+      --bg: #f6f7f8; --text: #16181b; --muted: #4a5058; --line: #d3d7dc;
+      --primary: #2350d8; --on-primary: #fff;
+      --tally: #e5383b; --warn: #d98e04; --off: #8a9099; --err: #ba1a1a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #202327; --text: #e6e8eb; --muted: #aeb4bb; --line: #464b53;
+        --primary: #b3c5ff; --on-primary: #0a2463;
+        --tally: #ff5f61; --warn: #f2b33d; --err: #ffb4ab;
+      }
+    }
+    body { width: 300px; margin: 0; padding: 14px 16px 16px; background: var(--bg); color: var(--text); font: 13px/1.45 system-ui, -apple-system, sans-serif; }
     h1 { font-size: 15px; margin: 0 0 10px; }
     .status { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
-    .dot.conectado { background: var(--ok); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--off); flex: none; box-sizing: border-box; }
+    .dot.conectado { background: var(--tally); }
     .dot.conectando, .dot.reconectando { background: var(--warn); }
-    .dot.error { background: var(--err); }
+    /* Anillo hueco: el error no se distingue de "Transmitiendo" solo por el color. */
+    .dot.error { background: transparent; border: 2px solid var(--err); }
     .detail { color: var(--muted); margin: 0 0 12px; min-height: 1.4em; }
     label { display: block; font-weight: 600; margin-bottom: 4px; }
     .row { display: flex; gap: 6px; }
-    input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: 12px ui-monospace, monospace; background: transparent; color: inherit; }
-    button { padding: 6px 10px; border: 0; border-radius: 6px; background: #2f6fdb; color: #fff; font-weight: 600; cursor: pointer; }
-    .saved { color: var(--ok); font-size: 12px; min-height: 1.4em; margin: 4px 0 8px; }
+    input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font: 12px ui-monospace, monospace; background: transparent; color: inherit; }
+    button { padding: 6px 10px; border: 0; border-radius: 8px; background: var(--primary); color: var(--on-primary); font-weight: 600; cursor: pointer; }
+    .saved { color: var(--primary); font-size: 12px; min-height: 1.4em; margin: 4px 0 8px; }
     .help { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
   </style>
 </head>

@@ -105,8 +105,7 @@ class GlBridge(
             release()
             throw it
         }
-        PreviewOutput.addListener(previewListener)
-        PreviewOutput.surface?.let { surface -> handler.post { attachPreview(surface) } }
+        PreviewOutput.setListener(previewListener)
     }
 
     private fun setup() {
@@ -175,7 +174,10 @@ class GlBridge(
         detachPreview()
         try {
             val created = EGL14.eglCreateWindowSurface(eglDisplay, eglConfig, surface, intArrayOf(EGL14.EGL_NONE), 0)
-            if (created == EGL14.EGL_NO_SURFACE) return
+            if (created == EGL14.EGL_NO_SURFACE) {
+                Log.w(TAG, "No se pudo conectar la vista previa (EGL 0x${Integer.toHexString(EGL14.eglGetError())})")
+                return
+            }
             previewSurface = created
             // Que la vista previa nunca haga esperar al encoder por la sincronización de pantalla.
             EGL14.eglMakeCurrent(eglDisplay, previewSurface, previewSurface, eglContext)

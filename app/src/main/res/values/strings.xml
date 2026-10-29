@@ -1,3 +1,58 @@
 <resources>
     <string name="app_name">PhoneCam Web</string>
+    <string name="wordmark_main" translatable="false">PhoneCam</string>
+    <string name="wordmark_suffix" translatable="false">Web</string>
+
+    <string name="camera_off">Cámara apagada</string>
+    <string name="status_off">Apagada</string>
+    <string name="status_starting">Iniciando…</string>
+    <string name="status_waiting">Esperando conexión</string>
+    <string name="action_start">Iniciar cámara</string>
+    <string name="action_retry">Reintentar</string>
+    <string name="action_stop">Detener</string>
+    <string name="cd_use_front">Usar cámara frontal</string>
+    <string name="cd_use_back">Usar cámara trasera</string>
+    <string name="mode_cable">Cable</string>
+    <string name="mode_wifi">Wi‑Fi</string>
+    <string name="cable_help">Conecta el cable y ejecuta %1$s en la Mac.</string>
+    <string name="wifi_address">Dirección</string>
+    <string name="wifi_code">Código</string>
+    <string name="wifi_copy">Copiar dirección</string>
+    <string name="wifi_copied">Dirección copiada</string>
+    <string name="wifi_new_code">Nuevo código</string>
+    <string name="wifi_unencrypted">El video viaja sin cifrar: usa Wi‑Fi solo en redes de confianza.</string>
+    <string name="wifi_no_network">Conecta el teléfono a la misma red Wi‑Fi que la Mac.</string>
+    <string name="new_code_title">¿Generar un código nuevo?</string>
+    <string name="new_code_body">Los navegadores conectados por Wi‑Fi se desconectarán hasta que uses el código nuevo.</string>
+    <string name="new_code_confirm">Generar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="switch_failed">No se pudo cambiar de cámara.</string>
+    <string name="err_permission_title">Falta el permiso de cámara.</string>
+    <string name="err_permission_hint">Sin él, la app no puede transmitir.</string>
+    <string name="err_open_settings">Abrir ajustes</string>
+    <string name="err_camera_title">No se pudo abrir la cámara.</string>
+    <string name="err_camera_hint">Puede estar en uso por otra app. Ciérrala y reintenta.</string>
+    <string name="err_encoder_title">El video dejó de funcionar.</string>
+    <string name="err_encoder_hint">Reintenta. Si se repite, reinicia el teléfono.</string>
+    <string name="err_port_title">No se pudo abrir la conexión.</string>
+    <string name="err_port_hint">Otra app está usando el puerto %1$d. Ciérrala y reintenta.</string>
+    <string name="details_title">Detalles técnicos</string>
+    <string name="details_browsers">Navegadores</string>
+    <string name="details_resolution">Resolución</string>
+    <string name="details_fps">Cuadros por segundo</string>
+    <string name="details_bitrate">Bitrate</string>
+    <string name="details_camera">Cámara</string>
+    <string name="details_front">Frontal</string>
+    <string name="details_back">Trasera</string>
+    <string name="details_restarts">Reinicios automáticos</string>
+    <string name="details_port">Puerto</string>
+    <string name="details_last_error">Último error</string>
+    <string name="details_adb">Cable manual: adb forward tcp:%1$d tcp:%1$d</string>
+    <string name="details_full_url">URL completa: %1$s</string>
+
+    <plurals name="status_live">
+        <item quantity="one">En vivo · %d navegador</item>
+        <item quantity="many">En vivo · %d navegadores</item>
+        <item quantity="other">En vivo · %d navegadores</item>
+    </plurals>
 </resources>
