@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Identidad D: teléfono acostado que muestra a una persona, con la luz roja junto a la cámara. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#E6E8EB"
+        android:pathData="M32,37h44a8,8 0,0 1,8 8v18a8,8 0,0 1,-8 8h-44a8,8 0,0 1,-8 -8v-18a8,8 0,0 1,8 -8z" />
+    <path
+        android:fillColor="#2350D8"
+        android:pathData="M36,40h41a3,3 0,0 1,3 3v22a3,3 0,0 1,-3 3h-41a3,3 0,0 1,-3 -3v-22a3,3 0,0 1,3 -3z" />
+    <path
+        android:fillColor="#FF4D4F"
+        android:pathData="M25.9,54a2.6,2.6 0,1 0,5.2 0a2.6,2.6 0,1 0,-5.2 0z" />
+    <path
+        android:fillColor="#DCE4FF"
+        android:pathData="M51,51.5a5.5,5.5 0,1 0,11 0a5.5,5.5 0,1 0,-11 0zM45,68C46,61.5 51,59 56.5,59C62,59 67,61.5 68,68z" />
+</vector>
